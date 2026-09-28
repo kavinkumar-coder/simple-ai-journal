@@ -30,7 +30,7 @@ else:
     db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     # 2. Split Workspace Layout Engine: Left side for inputs, Right side for Calendar
-    left_panel, right_panel = st.columns()
+    left_panel, right_panel = st.columns(2)
 
     # --- LEFT PANEL: THE INTERACTIVE CONVERSATION ENGINE ---
     with left_panel:
