@@ -100,7 +100,7 @@ else:
                         Timestamp Context: {current_timestamp} 
                         """ 
                         ai_response = ai_client.models.generate_content( 
-                            model='gemini-2.5-flash', 
+                            model='gemini-3.8-flash', 
                             contents=ai_structuring_prompt, 
                         ) 
                         processed_diary_entry = ai_response.text 
