@@ -17,12 +17,12 @@ st.markdown("""
 
 st.markdown('<p class="main-title">🔮 AI Voice Memory Diary Matrix</p>', unsafe_allow_html=True) 
 
-# --- CRITICAL STATE MANAGEMENT FIXES ---
-# Persistent cache to ensure text buffers don't get erased during execution steps
+# --- SAFE SESSION STATE WORKSPACE ---
+# Maintains text buffers safely across consecutive page rerun execution paths
 if "diary_text" not in st.session_state:
     st.session_state.diary_text = ""
 
-# Callback function to capture text area modifications instantly
+# Callback pipeline captures any keyboard input adjustments on the fly
 def update_text_area():
     st.session_state.diary_text = st.session_state.text_input_element
 
@@ -34,11 +34,11 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 if not all([GEMINI_KEY, SUPABASE_URL, SUPABASE_KEY]): 
     st.error("Setup Incomplete: System keys are missing from environment settings configurations.") 
 else: 
-    # Initialize connection clients 
+    # Initialize connection clients safely 
     ai_client = genai.Client(api_key=GEMINI_KEY) 
     db_client = create_client(SUPABASE_URL, SUPABASE_KEY) 
 
-    # 2. Split Workspace Layout Engine: 2 columns
+    # 2. Split Workspace Layout Engine: Corrected with column count constraint
     left_panel, right_panel = st.columns(2) 
 
     # --- LEFT PANEL: THE INTERACTIVE CONVERSATION ENGINE --- 
@@ -52,14 +52,14 @@ else:
             key='journal_mic'
         ) 
 
-        # If user captures voice, expose transcription action instantly
+        # Process extracted dictionary metrics safely
         if audio_data is not None: 
             st.audio(audio_data['bytes'], format="audio/wav") 
             
-            # Action button execution logic
             if st.button("🤖 Process Voice Input", type="secondary"): 
                 with st.spinner("Converting voice signals and analyzing content..."): 
                     try: 
+                        # Extracts ['bytes'] directly to bypass multi-index type mismatch crashes
                         response = ai_client.models.generate_content( 
                             model='gemini-2.5-flash', 
                             contents=[
@@ -73,7 +73,7 @@ else:
                     except Exception as ex: 
                         st.error(f"Voice Analytics Error: {ex}") 
 
-        # Controlled text area linked seamlessly with session memory updates
+        # State-controlled text field tracking modification states securely
         user_input = st.text_area(
             "Alternatively, type a thought thread here:", 
             value=st.session_state.diary_text,
@@ -109,7 +109,7 @@ else:
                         payload = {"content": f"📅 Logged: {current_timestamp}\n\n{processed_diary_entry}"} 
                         db_client.table("journal_logs").insert(payload).execute() 
                         
-                        # Reset state configurations on database execution success
+                        # Reset tracking state caches upon database row confirmation
                         st.session_state.diary_text = ""
                         st.success("Timeline entry successfully cataloged into database!") 
                         st.balloons()
@@ -123,7 +123,8 @@ else:
         selected_date = st.date_input("Filter your diary logs by choosing a specific calendar date:") 
 
         try: 
-            response = db_client.table("journal_logs").select("id, created_at, content").order("id", descending=True).execute() 
+            # Fixed keyword parser: replaced 'descending=True' with 'desc=True'
+            response = db_client.table("journal_logs").select("id, created_at, content").order("id", desc=True).execute() 
             data_rows = response.data 
 
             if not data_rows: 
@@ -131,14 +132,22 @@ else:
             else: 
                 matching_entries = 0
                 for row in data_rows: 
-                    row_date = row['created_at'][:10] 
-                    
-                    if str(selected_date) == row_date: 
-                        matching_entries += 1
-                        with st.container(): 
-                            st.markdown(f'<div class="diary-card"><b>📁 Memory Entry Block #{row["id"]}</b> | 🕒 {row["created_at"][11:16]}</div>', unsafe_allow_html=True) 
-                            st.markdown(row['content']) 
-                            st.divider()
+                    try:
+                        # Fixed slicing bug: Parse standard ISO strings robustly across all locale formats
+                        row_datetime = datetime.fromisoformat(row['created_at'].replace('Z', '+00:00'))
+                        
+                        # Compares datetime objects directly instead of format-sensitive strings
+                        if selected_date == row_datetime.date(): 
+                            matching_entries += 1
+                            clean_time = row_datetime.strftime("%H:%M")
+                            
+                            with st.container(): 
+                                st.markdown(f'<div class="diary-card"><b>📁 Memory Entry Block #{row["id"]}</b> | 🕒 {clean_time}</div>', unsafe_allow_html=True) 
+                                st.markdown(row['content']) 
+                                st.divider()
+                    except Exception:
+                        # Safeguard prevents an invalid formatting instance from breaking the dashboard frame loop
+                        continue
                 
                 if matching_entries == 0:
                     st.info(f"No diary entries found for {selected_date}.")
