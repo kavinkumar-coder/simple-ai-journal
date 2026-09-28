@@ -1,118 +1,147 @@
-import streamlit as st
-import os
-from google import genai
-from supabase import create_client
-from datetime import datetime
-from streamlit_mic_recorder import mic_recorder, speech_to_text
+import streamlit as st 
+import os 
+from google import genai 
+from supabase import create_client 
+from datetime import datetime 
+from streamlit_mic_recorder import mic_recorder
 
-# 1. Advanced Page Layout & Theme Styling
-st.set_page_config(page_title="AI Voice Memory Diary", layout="wide", page_icon="🔮")
+# 1. Advanced Page Layout & Theme Styling 
+st.set_page_config(page_title="AI Voice Memory Diary", layout="wide", page_icon="🔮") 
 
-st.markdown("""
-    <style>
-    .main-title { font-size:40px !important; font-weight: 700; color: #4A90E2; text-align: center; margin-bottom: 20px;}
-    .diary-card { padding: 15px; border-radius: 10px; background-color: #f8f9fa; border-left: 5px solid #4A90E2; margin-bottom: 12px; }
-    </style>
-""", unsafe_allow_html=True)
+st.markdown(""" 
+<style> 
+    .main-title { font-size:40px !important; font-weight: 700; color: #4A90E2; text-align: center; margin-bottom: 20px;} 
+    .diary-card { padding: 15px; border-radius: 10px; background-color: #f8f9fa; border-left: 5px solid #4A90E2; margin-bottom: 12px; } 
+</style> 
+""", unsafe_allow_html=True) 
 
-st.markdown('<p class="main-title">🔮 AI Voice Memory Diary Matrix</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-title">🔮 AI Voice Memory Diary Matrix</p>', unsafe_allow_html=True) 
 
-# Fetch secure connection keys from cloud environment settings
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+# --- CRITICAL STATE MANAGEMENT FIXES ---
+# Persistent cache to ensure text buffers don't get erased during execution steps
+if "diary_text" not in st.session_state:
+    st.session_state.diary_text = ""
 
-if not all([GEMINI_KEY, SUPABASE_URL, SUPABASE_KEY]):
-    st.error("Setup Incomplete: System keys are missing from environment settings configurations.")
-else:
-    # Initialize connection clients
-    ai_client = genai.Client(api_key=GEMINI_KEY)
-    db_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Callback function to capture text area modifications instantly
+def update_text_area():
+    st.session_state.diary_text = st.session_state.text_input_element
 
-    # 2. Split Workspace Layout Engine: Left side for inputs, Right side for Calendar
-    left_panel, right_panel = st.columns(2)
+# Fetch secure connection keys from cloud environment settings 
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY") 
+SUPABASE_URL = os.environ.get("SUPABASE_URL") 
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY") 
 
-    # --- LEFT PANEL: THE INTERACTIVE CONVERSATION ENGINE ---
-    with left_panel:
-        st.subheader("🎙️ Speak or Chat with Your Diary")
+if not all([GEMINI_KEY, SUPABASE_URL, SUPABASE_KEY]): 
+    st.error("Setup Incomplete: System keys are missing from environment settings configurations.") 
+else: 
+    # Initialize connection clients 
+    ai_client = genai.Client(api_key=GEMINI_KEY) 
+    db_client = create_client(SUPABASE_URL, SUPABASE_KEY) 
+
+    # 2. Split Workspace Layout Engine: 2 columns
+    left_panel, right_panel = st.columns(2) 
+
+    # --- LEFT PANEL: THE INTERACTIVE CONVERSATION ENGINE --- 
+    with left_panel: 
+        st.subheader("🎙️ Speak or Chat with Your Diary") 
         
-        # Browser-based Audio Microphone recorder tool
-        st.write("Click below to record your voice entry thoughts naturally:")
-        audio_data = st_audrec()
-        
-        user_input = st.text_area("Alternatively, type a thought thread here:", placeholder="Talk about your day, lessons learned, or goals...")
-        
-        # If user captures voice, convert it into text using Gemini's audio pipeline
-        if audio_data is not None:
-            st.audio(audio_data, format="audio/wav")
-            if st.button("🤖 Process Voice Input"):
-                with st.spinner("Converting voice signals and analyzing content..."):
-                    try:
-                        response = ai_client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=[{"mime_type": "audio/wav", "data": audio_data}, "Transcribe this audio precisely. Clear out stutters, structure it like an intimate, meaningful diary statement block."]
-                        )
-                        user_input = response.text
-                        st.success("Voice transcribed successfully! Check the text block below before saving.")
-                    except Exception as ex:
-                        st.error(f"Voice Analytics Error: {ex}")
+        st.write("Click below to record your voice entry thoughts naturally:") 
+        audio_data = mic_recorder(
+            start_prompt="🎵 Start Recording",
+            stop_prompt="🛑 Stop Recording",
+            key='journal_mic'
+        ) 
 
-        # Sync button to lock entry into calendar rows
-        if st.button("💾 Sync Thoughts to Calendar Ledger", type="primary"):
-            if not user_input.strip():
-                st.warning("Please record audio or type text into your input console first.")
-            else:
-                with st.spinner("Structuring metadata and syncing timelines safely to cloud..."):
-                    try:
-                        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        # Command Gemini to serve as an advanced diary structuring agent
-                        ai_structuring_prompt = f"""
-                        You are an expert personal psychologist and operational diary editor. 
-                        Analyze this raw daily stream of thoughts: "{user_input}"
-                        Tasks:
-                        1. Structure it into a beautiful chronological diary segment.
-                        2. Extract a bulleted checklist summary named 'Core Takeaways & Insights'.
-                        Timestamp Context: {current_timestamp}
-                        """
-                        
-                        ai_response = ai_client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=ai_structuring_prompt,
-                        )
-                        processed_diary_entry = ai_response.text
-                        
-                        # Save final payload string data straight down into your active table row ledger
-                        payload = {"content": f"📅 Logged: {current_timestamp}\n\n{processed_diary_entry}"}
-                        db_client.table("journal_logs").insert(payload).execute()
-                        
-                        st.success("Timeline entry successfully cataloged into database!")
-                        st.balloons()
-                        
-                    except Exception as err:
-                        st.error(f"Failed to synchronize state matrices: {err}")
-
-    # --- RIGHT PANEL: THE DYNAMIC CHRONOLOGICAL CALENDAR VIEWER ---
-    with right_panel:
-        st.subheader("📅 Live Calendar Timeline Deck")
-        selected_date = st.date_input("Filter your diary logs by choosing a specific calendar date:")
-        
-        try:
-            # Query history ledger data metrics directly from Supabase
-            response = db_client.table("journal_logs").select("id, created_at, content").order("id", descending=True).execute()
-            data_rows = response.data
+        # If user captures voice, expose transcription action instantly
+        if audio_data is not None: 
+            st.audio(audio_data['bytes'], format="audio/wav") 
             
-            if not data_rows:
-                st.info("Your database diary folder ledger rows are currently empty.")
-            else:
-                for row in data_rows:
-                    row_date = row['created_at'][:10] # Extract the YYYY-MM-DD string part
+            # Action button execution logic
+            if st.button("🤖 Process Voice Input", type="secondary"): 
+                with st.spinner("Converting voice signals and analyzing content..."): 
+                    try: 
+                        response = ai_client.models.generate_content( 
+                            model='gemini-2.5-flash', 
+                            contents=[
+                                {"mime_type": "audio/wav", "data": audio_data['bytes']}, 
+                                "Transcribe this audio precisely. Clear out stutters, structure it like an intimate, meaningful diary statement block."
+                            ] 
+                        ) 
+                        st.session_state.diary_text = response.text 
+                        st.success("Voice transcribed successfully! Check the text block below before saving.")
+                        st.rerun() 
+                    except Exception as ex: 
+                        st.error(f"Voice Analytics Error: {ex}") 
+
+        # Controlled text area linked seamlessly with session memory updates
+        user_input = st.text_area(
+            "Alternatively, type a thought thread here:", 
+            value=st.session_state.diary_text,
+            placeholder="Talk about your day, lessons learned, or goals...",
+            height=200,
+            key="text_input_element",
+            on_change=update_text_area
+        ) 
+
+        # Sync button to lock entry into calendar rows 
+        if st.button("💾 Sync Thoughts to Calendar Ledger", type="primary"): 
+            if not user_input.strip(): 
+                st.warning("Please record audio or type text into your input console first.") 
+            else: 
+                with st.spinner("Structuring metadata and syncing timelines safely to cloud..."): 
+                    try: 
+                        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
+                        
+                        ai_structuring_prompt = f""" 
+                        You are an expert personal psychologist and operational diary editor. Analyze this raw daily stream of thoughts: "{user_input}" 
+                        Tasks: 
+                        1. Structure it into a beautiful chronological diary segment. 
+                        2. Extract a bulleted checklist summary named 'Core Takeaways & Insights'. 
+                        Timestamp Context: {current_timestamp} 
+                        """ 
+                        ai_response = ai_client.models.generate_content( 
+                            model='gemini-2.5-flash', 
+                            contents=ai_structuring_prompt, 
+                        ) 
+                        processed_diary_entry = ai_response.text 
+
+                        # Save final payload string data straight down into your active table row ledger 
+                        payload = {"content": f"📅 Logged: {current_timestamp}\n\n{processed_diary_entry}"} 
+                        db_client.table("journal_logs").insert(payload).execute() 
+                        
+                        # Reset state configurations on database execution success
+                        st.session_state.diary_text = ""
+                        st.success("Timeline entry successfully cataloged into database!") 
+                        st.balloons()
+                        st.rerun()
+                    except Exception as err: 
+                        st.error(f"Failed to synchronize state matrices: {err}") 
+
+    # --- RIGHT PANEL: THE DYNAMIC CHRONOLOGICAL CALENDAR VIEWER --- 
+    with right_panel: 
+        st.subheader("📅 Live Calendar Timeline Deck") 
+        selected_date = st.date_input("Filter your diary logs by choosing a specific calendar date:") 
+
+        try: 
+            response = db_client.table("journal_logs").select("id, created_at, content").order("id", descending=True).execute() 
+            data_rows = response.data 
+
+            if not data_rows: 
+                st.info("Your database diary folder ledger rows are currently empty.") 
+            else: 
+                matching_entries = 0
+                for row in data_rows: 
+                    row_date = row['created_at'][:10] 
                     
-                    # Filter matching rows dynamically matching our selector calendar date keys
-                    if str(selected_date) == row_date:
-                        with st.container():
-                            st.markdown(f'<div class="diary-card"><b>📁 Memory Entry Block #{row["id"]}</b> | 🕒 {row["created_at"][11:16]}</div>', unsafe_allow_html=True)
-                            st.markdown(row['content'])
+                    if str(selected_date) == row_date: 
+                        matching_entries += 1
+                        with st.container(): 
+                            st.markdown(f'<div class="diary-card"><b>📁 Memory Entry Block #{row["id"]}</b> | 🕒 {row["created_at"][11:16]}</div>', unsafe_allow_html=True) 
+                            st.markdown(row['content']) 
                             st.divider()
-        except Exception as error_logs:
+                
+                if matching_entries == 0:
+                    st.info(f"No diary entries found for {selected_date}.")
+                    
+        except Exception as error_logs: 
             st.error(f"Could not load dynamic archive dashboard: {error_logs}")
