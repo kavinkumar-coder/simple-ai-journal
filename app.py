@@ -61,7 +61,7 @@ else:
                     try: 
                         # Extracts ['bytes'] directly to bypass multi-index type mismatch crashes
                         response = ai_client.models.generate_content( 
-                            model='gemini-2.5-flash', 
+                            model='gemini-3.8-flash', 
                             contents=[
                                 {"mime_type": "audio/wav", "data": audio_data['bytes']}, 
                                 "Transcribe this audio precisely. Clear out stutters, structure it like an intimate, meaningful diary statement block."
