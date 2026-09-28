@@ -3,7 +3,7 @@ import os
 from google import genai
 from supabase import create_client
 from datetime import datetime
-from st_audrec import st_audrec
+from streamlit_mic_recorder import mic_recorder, speech_to_text
 
 # 1. Advanced Page Layout & Theme Styling
 st.set_page_config(page_title="AI Voice Memory Diary", layout="wide", page_icon="🔮")
