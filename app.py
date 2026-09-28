@@ -29,7 +29,7 @@ else:
                     # 1. Ask Gemini to extract a core summary action item
                     prompt = f"Extract a one-sentence, bulleted action item or main takeaway from this journal entry: {user_entry}"
                     response = ai_client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-3.8-flash',
                         contents=prompt,
                     )
                     ai_result = response.text
